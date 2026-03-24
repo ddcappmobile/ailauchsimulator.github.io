@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<title>AI Launch Simulator</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
+
+</head>
+
+<body class="bg-black text-white min-h-screen flex flex-col items-center px-6 py-10">
+
+<h1 class="text-4xl font-bold mb-6">AI Launch Simulator</h1>
+
+<!-- LOGIN -->
+<input id="email" placeholder="Seu email"
+class="p-3 rounded text-black w-full max-w-xl"/>
+<button onclick="login()" class="bg-blue-500 px-4 py-2 mt-2 rounded">Entrar</button>
+
+<!-- IDEA -->
+<textarea id="idea" class="w-full max-w-xl p-4 rounded text-black mt-6"
+placeholder="Descreva sua ideia"></textarea>
+
+<button onclick="runSimulation()" class="bg-white text-black px-6 py-3 mt-4 rounded">
+Simular
+</button>
+
+<!-- RESULT -->
+<div id="result" class="hidden mt-8 max-w-xl">
+<p id="score"></p>
+<p id="decision"></p>
+<p id="profit"></p>
+<p id="success"></p>
+<p id="analysis"></p>
+</div>
+
+<canvas id="chart" class="mt-10 max-w-xl"></canvas>
+
+<div id="history" class="mt-10 max-w-xl"></div>
+
+<button onclick="buy()" class="bg-green-500 px-6 py-3 mt-6 rounded">
+Upgrade PRO
+</button>
+
+<script>
+
+/* CONFIG */
+const supabase = window.supabase.createClient(
+"https://wwniehunxzpmbcwbxswh.supabase.co",
+"publivsb_publishable_jCZDNmQehUNWHZljTp-PHw_bp7i2vUB"
+);
+
+emailjs.init("PF8bQc1UkxbXZVTF-");
+
+const GEMINI_KEY = "COLOQUE_SUA_KEY";
+
+/* LOGIN */
+async function login(){
+const email = document.getElementById("email").value;
+await supabase.auth.signInWithOtp({ email });
+alert("Verifique seu email!");
+}
+
+/* IA COMPLETA */
+async function analyzeIdea(idea){
+
+const prompt = `
+Você é especialista em negócios.
+
+Analise:
+
+${idea}
+
+Retorne JSON:
+
+{
+ "tipo_negocio":"",
+ "publico":"",
+ "demanda":"",
+ "concorrencia":"",
+ "ticket_estimado":"",
+ "cac_estimado":"",
+ "riscos":[],
+ "recomendacoes":[],
+ "score":0,
+ "decisao":""
+}
+`;
+
+const res = await fetch(
+`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_KEY}`,
+{
+method:"POST",
+headers:{ "Content-Type":"application/json"},
+body:JSON.stringify({
+contents:[{parts:[{text:prompt}]}]
+})
+});
+
+const data = await res.json();
+
+try {
+return JSON.parse(data.candidates[0].content.parts[0].text);
+} catch {
+return {
+score:50,
+decisao:"AJUSTAR",
+riscos:["Erro IA"],
+recomendacoes:["Refinar ideia"]
+};
+}
+}
+
+/* SIMULAÇÃO */
+function simulate(){
+
+let results=[];
+
+for(let i=0;i<1000;i++){
+let r=Math.random()*1000;
+results.push(r);
+}
+
+let avg=results.reduce((a,b)=>a+b)/results.length;
+let success=results.filter(r=>r>500).length/results.length;
+
+return {avg,success,results};
+}
+
+/* MAIN */
+async function runSimulation(){
+
+const idea = document.getElementById("idea").value;
+
+const ai = await analyzeIdea(idea);
+const sim = simulate();
+
+document.getElementById("result").classList.remove("hidden");
+
+document.getElementById("score").innerText = "Score: "+ai.score;
+document.getElementById("decision").innerText = "Decisão: "+ai.decisao;
+document.getElementById("profit").innerText = "Lucro médio: "+sim.avg.toFixed(2);
+document.getElementById("success").innerText = "Sucesso: "+(sim.success*100).toFixed(1)+"%";
+
+document.getElementById("analysis").innerText =
+"Riscos: "+ai.riscos.join(", ")+" | Recomendações: "+ai.recomendacoes.join(", ");
+
+/* salvar */
+const user = (await supabase.auth.getUser()).data.user;
+
+if(user){
+await supabase.from("simulations").insert({
+idea,
+lucro: sim.avg,
+sucesso: sim.success,
+user_id: user.id
+});
+
+/* email */
+await emailjs.send(
+"SEU_SERVICE_ID",
+"SEU_TEMPLATE_ID",
+{
+email: user.email,
+idea: idea,
+lucro: sim.avg.toFixed(2),
+sucesso: (sim.success*100).toFixed(1)
+}
+);
+}
+
+/* gráfico */
+new Chart(document.getElementById("chart"), {
+type:"line",
+data:{
+labels:sim.results.slice(0,50),
+datasets:[{label:"Simulação",data:sim.results.slice(0,50)}]
+}
+});
+
+loadHistory();
+}
+
+/* HISTÓRICO */
+async function loadHistory(){
+
+const user = (await supabase.auth.getUser()).data.user;
+if(!user) return;
+
+const { data } = await supabase.from("simulations").select("*");
+
+const div = document.getElementById("history");
+div.innerHTML="";
+
+data.forEach(d=>{
+div.innerHTML += `
+<p>${d.idea} - R$${d.lucro}</p>
+`;
+});
+}
+
+/* PAGAMENTO */
+function buy(){
+window.location.href="COLOQUE_SEU_STRIPE_LINK";
+}
+
+</script>
+
+</body>
+</html>
